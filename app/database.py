@@ -50,5 +50,8 @@ def get_db():
 
 
 def init_db() -> None:
+    if not settings.auto_init_db:
+        return
+
     Base.metadata.create_all(bind=engine)
     ensure_tasks_schema()

@@ -1,7 +1,7 @@
 PYTHON=.venv/bin/python
 PIP=.venv/bin/pip
 
-.PHONY: install api dashboard test lint seed migrate upgrade downgrade
+.PHONY: install api dashboard test lint seed migrate upgrade downgrade compose-up compose-down
 
 install:
 	$(PIP) install -r requirements.txt
@@ -29,3 +29,9 @@ upgrade:
 
 downgrade:
 	$(PYTHON) -m alembic downgrade -1
+
+compose-up:
+	docker compose up --build
+
+compose-down:
+	docker compose down

@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: taskflow-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    autoDeploy: true
+    envVars:
+      - key: TASKFLOW_ENV
+        value: production
+      - key: TASKFLOW_DATABASE_URL
+        value: sqlite:///./tareas.db
+      - key: TASKFLOW_AUTO_INIT_DB
+        value: "true"
+
+  - type: web
+    name: taskflow-dashboard
+    runtime: docker
+    dockerfilePath: ./Dockerfile.streamlit
+    autoDeploy: true
+    envVars:
+      - key: TASKFLOW_ENV
+        value: production
+      - key: TASKFLOW_API_BASE_URL
+        value: https://taskflow-api.onrender.com

@@ -12,6 +12,8 @@ El proyecto incluye:
 - Dashboard en Streamlit con filtros y exportacion CSV.
 - Script de seed para generar historico realista.
 - Migraciones con Alembic.
+- Contenedores Docker para API y dashboard.
+- Configuracion de despliegue en Render.
 - Tests automatizados y workflow de GitHub Actions.
 
 ## Stack
@@ -54,8 +56,10 @@ El proyecto incluye:
 
 Variables soportadas:
 
+- `TASKFLOW_ENV`: `development` o `production`.
 - `TASKFLOW_DATABASE_URL`: URL de base de datos SQLite.
 - `TASKFLOW_API_BASE_URL`: URL base que usara Streamlit para consultar la API.
+- `TASKFLOW_AUTO_INIT_DB`: controla la inicializacion automatica de esquema al arrancar.
 
 Puedes partir de [.env.example](.env.example).
 
@@ -75,6 +79,7 @@ make api
 make dashboard
 make seed
 make lint
+make compose-up
 ```
 
 ## Ejecutar la API
@@ -105,6 +110,19 @@ Incluye:
 - Filtros por estado, responsable y fecha.
 - Graficos para distribucion de estados y tiempos medios.
 - Descarga CSV de los datos filtrados.
+
+## Docker
+
+Levantar API y dashboard con Docker Compose:
+
+```bash
+make compose-up
+```
+
+Servicios expuestos:
+
+- API en `http://127.0.0.1:8000`
+- Dashboard en `http://127.0.0.1:8501`
 
 ## Datos del modelo
 
@@ -175,6 +193,8 @@ Crear una nueva migracion autogenerada:
 make migrate MSG="describe el cambio"
 ```
 
+En produccion, puedes desactivar la creacion automatica de tablas usando `TASKFLOW_AUTO_INIT_DB=false` y confiar solo en Alembic.
+
 ## Tests
 
 ```bash
@@ -189,12 +209,17 @@ El proyecto ya incluye:
 - `pyproject.toml` con configuracion base de pytest y Ruff
 - `Makefile` con comandos frecuentes de desarrollo
 - configuracion de Alembic lista para migraciones
+- `Dockerfile.api`, `Dockerfile.streamlit` y `docker-compose.yml`
+- `render.yaml` para despliegue desde el repositorio
+- `CHANGELOG.md` con la primera version publicada
 - workflow de CI en `.github/workflows/tests.yml`
 - documentacion lista para repositorio publico
 
-## Siguientes mejoras razonables
+## Despliegue en Render
 
-- Migraciones reales con Alembic
-- Docker para API y dashboard
-- Autenticacion y control de acceso
-- Exportacion Excel o Parquet
+El repositorio ya incluye [render.yaml](render.yaml) con dos servicios:
+
+- `taskflow-api`
+- `taskflow-dashboard`
+
+Solo necesitas conectar el repositorio en Render y ajustar la URL publica final de la API si cambia.

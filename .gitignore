@@ -29,3 +29,6 @@ contexto.txt
 
 # OS files
 .DS_Store
+
+# Docker
+*.pid
