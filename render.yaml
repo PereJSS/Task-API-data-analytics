@@ -9,6 +9,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.api
     autoDeploy: true
+    healthCheckPath: /health
     envVars:
       - key: TASKFLOW_ENV
         value: production
@@ -28,4 +29,7 @@ services:
       - key: TASKFLOW_ENV
         value: production
       - key: TASKFLOW_API_BASE_URL
-        value: https://taskflow-api.onrender.com
+        fromService:
+          type: web
+          name: taskflow-api
+          property: url

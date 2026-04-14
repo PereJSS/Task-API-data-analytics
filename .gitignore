@@ -21,8 +21,8 @@ test_tasks.db
 .env
 contexto.txt
 
-# Streamlit
-.streamlit/
+# Streamlit secrets (not config)
+.streamlit/secrets.toml
 
 # VS Code
 .vscode/
