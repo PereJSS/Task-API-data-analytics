@@ -105,11 +105,25 @@ streamlit run streamlit_app.py
 
 Dashboard en `http://127.0.0.1:8501`.
 
+Por defecto, el dashboard arranca en **modo demo local (gratis)**, sin depender de API.
+Tambien puedes cambiar en la barra lateral a **API remota** para consumir el backend.
+
 Incluye:
 
 - Filtros por estado, responsable y fecha.
 - Graficos para distribucion de estados y tiempos medios.
 - Descarga CSV de los datos filtrados.
+
+## Despliegue gratuito (opcion recomendada)
+
+Puedes publicar solo el dashboard en Streamlit Community Cloud sin coste:
+
+1. Conecta el repositorio en Streamlit Cloud.
+2. App file: `streamlit_app.py`.
+3. Python version: `3.11`.
+4. Deploy.
+
+No necesitas desplegar API ni base de datos para demo, porque el modo local genera datos analiticos automaticamente.
 
 ## Docker
 
