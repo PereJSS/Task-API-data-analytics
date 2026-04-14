@@ -57,7 +57,7 @@ El proyecto incluye:
 Variables soportadas:
 
 - `TASKFLOW_ENV`: `development` o `production`.
-- `TASKFLOW_DATABASE_URL`: URL de base de datos SQLite.
+- `TASKFLOW_DATABASE_URL`: URL de base de datos SQLite o Postgres.
 - `TASKFLOW_API_BASE_URL`: URL base que usara Streamlit para consultar la API.
 - `TASKFLOW_AUTO_INIT_DB`: controla la inicializacion automatica de esquema al arrancar.
 
@@ -121,8 +121,11 @@ make compose-up
 
 Servicios expuestos:
 
+- Postgres en `localhost:5432`
 - API en `http://127.0.0.1:8000`
 - Dashboard en `http://127.0.0.1:8501`
+
+En Docker Compose, la API ya usa Postgres y arranca aplicando `alembic upgrade head`.
 
 ## Datos del modelo
 
@@ -219,7 +222,12 @@ El proyecto ya incluye:
 
 El repositorio ya incluye [render.yaml](render.yaml) con dos servicios:
 
+- `taskflow-db`
 - `taskflow-api`
 - `taskflow-dashboard`
 
 Solo necesitas conectar el repositorio en Render y ajustar la URL publica final de la API si cambia.
+
+## Nota sobre GitHub Release
+
+El tag Git ya existe, pero en este entorno no hay `gh` ni credenciales para crear una release publicada desde CLI. El repositorio si queda listo para crearla manualmente en GitHub a partir del tag existente.

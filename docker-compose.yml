@@ -1,14 +1,27 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: taskflow
+      POSTGRES_USER: taskflow
+      POSTGRES_PASSWORD: taskflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
     environment:
       TASKFLOW_ENV: development
-      TASKFLOW_DATABASE_URL: sqlite:///./tareas.db
-      TASKFLOW_AUTO_INIT_DB: "true"
+      TASKFLOW_DATABASE_URL: postgresql+psycopg://taskflow:taskflow@db:5432/taskflow
+      TASKFLOW_AUTO_INIT_DB: "false"
     ports:
       - "8000:8000"
+    depends_on:
+      - db
     volumes:
       - .:/app
 
@@ -25,3 +38,6 @@ services:
       - api
     volumes:
       - .:/app
+
+volumes:
+  postgres_data:

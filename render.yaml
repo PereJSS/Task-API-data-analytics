@@ -1,3 +1,8 @@
+databases:
+  - name: taskflow-db
+    databaseName: taskflow
+    user: taskflow
+
 services:
   - type: web
     name: taskflow-api
@@ -8,9 +13,11 @@ services:
       - key: TASKFLOW_ENV
         value: production
       - key: TASKFLOW_DATABASE_URL
-        value: sqlite:///./tareas.db
+        fromDatabase:
+          name: taskflow-db
+          property: connectionString
       - key: TASKFLOW_AUTO_INIT_DB
-        value: "true"
+        value: "false"
 
   - type: web
     name: taskflow-dashboard

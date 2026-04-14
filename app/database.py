@@ -3,9 +3,15 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
 
+
+def _build_engine_kwargs() -> dict:
+    if settings.database_url.startswith("sqlite"):
+        return {"connect_args": {"check_same_thread": False}}
+    return {}
+
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False},
+    **_build_engine_kwargs(),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -13,6 +19,9 @@ Base = declarative_base()
 
 def ensure_tasks_schema() -> None:
     """Lightweight schema evolution for SQLite without Alembic."""
+    if not settings.database_url.startswith("sqlite"):
+        return
+
     with engine.begin() as conn:
         table_exists = conn.execute(
             text("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
