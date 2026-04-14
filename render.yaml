@@ -34,4 +34,4 @@ services:
         fromService:
           type: web
           name: taskflow-api
-          property: url
+          property: hostport
