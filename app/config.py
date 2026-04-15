@@ -2,6 +2,8 @@ import os
 
 
 class Settings:
+    """Centralize environment-driven settings and normalize them once at startup."""
+
     def __init__(self) -> None:
         self.environment = os.getenv("TASKFLOW_ENV", "development")
         raw_database_url = os.getenv("TASKFLOW_DATABASE_URL", "sqlite:///./tareas.db")
@@ -12,6 +14,7 @@ class Settings:
 
     @staticmethod
     def _normalize_database_url(database_url: str) -> str:
+        """Translate shorthand Postgres URLs into the SQLAlchemy driver form used by the app."""
         if database_url.startswith("postgres://"):
             return database_url.replace("postgres://", "postgresql+psycopg://", 1)
         if database_url.startswith("postgresql://"):
@@ -20,6 +23,7 @@ class Settings:
 
     @staticmethod
     def _normalize_http_url(raw_url: str) -> str:
+        """Allow host:port values in env vars while still producing a valid HTTP base URL."""
         if raw_url.startswith(("http://", "https://")):
             return raw_url
         return f"http://{raw_url}"

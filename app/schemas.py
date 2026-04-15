@@ -7,6 +7,8 @@ TaskStatus = Literal["pending", "in_progress", "blocked", "completed", "cancelle
 
 
 class TaskBase(BaseModel):
+    """Shared fields used by both input and output task models."""
+
     title: str = Field(..., min_length=3, max_length=120)
     description: Optional[str] = Field(default=None, max_length=500)
     created_by: Optional[str] = Field(default=None, max_length=120)
@@ -24,10 +26,14 @@ class TaskBase(BaseModel):
 
 
 class TaskCreate(TaskBase):
+    """Payload required to create a new task."""
+
     pass
 
 
 class TaskUpdate(BaseModel):
+    """Partial update payload so clients can patch only the fields they need."""
+
     title: Optional[str] = Field(default=None, min_length=3, max_length=120)
     description: Optional[str] = Field(default=None, max_length=500)
     created_by: Optional[str] = Field(default=None, max_length=120)
@@ -49,6 +55,8 @@ class TaskUpdate(BaseModel):
 
 
 class TaskResponse(TaskBase):
+    """API response model returned for task resources."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -61,6 +69,8 @@ class TaskResponse(TaskBase):
 
 
 class TaskStats(BaseModel):
+    """Aggregate counters used by analytics views and summary cards."""
+
     total: int
     completed: int
     pending: int

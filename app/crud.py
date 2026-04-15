@@ -13,6 +13,7 @@ PENDING_STATUS = "pending"
 
 
 def _sync_completion_fields(db_task: TaskDB, was_completed: bool) -> None:
+    """Keep status, completion timestamps and duration consistent after any write."""
     if db_task.completed:
         if db_task.status != COMPLETED_STATUS:
             db_task.status = COMPLETED_STATUS
@@ -37,6 +38,7 @@ def _sync_completion_fields(db_task: TaskDB, was_completed: bool) -> None:
 
 
 def create_task(db: Session, payload: TaskCreate) -> TaskDB:
+    """Create a task and immediately normalize any completion-related fields."""
     db_task = TaskDB(id=str(uuid4()), **payload.model_dump())
 
     if db_task.status == COMPLETED_STATUS:
@@ -51,6 +53,7 @@ def create_task(db: Session, payload: TaskCreate) -> TaskDB:
 
 
 def get_task(db: Session, task_id: str, include_archived: bool = False) -> Optional[TaskDB]:
+    """Fetch one task, optionally including soft-deleted records."""
     query = db.query(TaskDB).filter(TaskDB.id == task_id)
     if not include_archived:
         query = query.filter(TaskDB.archived.is_(False))
@@ -67,6 +70,7 @@ def list_tasks(
     limit: int,
     offset: int,
 ) -> List[TaskDB]:
+    """Return a filtered, paginated task list ready for the API layer."""
     query = db.query(TaskDB)
 
     if not include_archived:
@@ -97,6 +101,7 @@ def list_tasks(
 
 
 def update_task(db: Session, db_task: TaskDB, payload: TaskUpdate) -> TaskDB:
+    """Apply partial updates and recompute derived completion fields when needed."""
     was_completed = db_task.completed
     data = payload.model_dump(exclude_unset=True)
     for key, value in data.items():
@@ -116,11 +121,13 @@ def update_task(db: Session, db_task: TaskDB, payload: TaskUpdate) -> TaskDB:
 
 
 def archive_task(db: Session, db_task: TaskDB) -> None:
+    """Soft delete a task so it disappears from default listings without losing history."""
     db_task.archived = True
     db.commit()
 
 
 def task_stats(db: Session) -> TaskStats:
+    """Compute aggregate status metrics used by dashboards and summary endpoints."""
     total = db.query(func.count(TaskDB.id)).scalar() or 0
     completed = db.query(func.count(TaskDB.id)).filter(TaskDB.completed.is_(True)).scalar() or 0
     archived = db.query(func.count(TaskDB.id)).filter(TaskDB.archived.is_(True)).scalar() or 0

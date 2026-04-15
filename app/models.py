@@ -6,6 +6,8 @@ from app.database import Base
 
 
 class TaskDB(Base):
+    """Database representation of a task enriched with analytics-friendly metadata."""
+
     __tablename__ = "tasks"
 
     id = Column(String, primary_key=True, index=True)

@@ -9,6 +9,7 @@ from app.routers.tasks import router as tasks_router
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    """Run one-time startup initialization before the app serves traffic."""
     init_db()
     yield
 
@@ -22,6 +23,7 @@ app = FastAPI(
 
 @app.get("/", tags=["System"])
 def root() -> Dict[str, str]:
+    """Provide a simple landing payload for browsers and health checks."""
     return {
         "message": "TaskFlow API activa",
         "docs": "/docs",
@@ -32,6 +34,7 @@ def root() -> Dict[str, str]:
 
 @app.get("/health", tags=["System"])
 def health_check() -> Dict[str, str]:
+    """Return a minimal health response used by orchestrators and uptime checks."""
     return {"status": "ok"}
 
 

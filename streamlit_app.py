@@ -1,6 +1,6 @@
 import random
 from datetime import datetime, timedelta
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import pandas as pd
 import plotly.express as px
@@ -11,6 +11,9 @@ from app.config import settings
 
 API_BASE_URL = settings.streamlit_api_base_url
 STATUS_ORDER = ["pending", "in_progress", "blocked", "completed", "cancelled"]
+DATETIME_COLUMNS = ["created_at", "updated_at", "started_at", "completed_at"]
+COMPLETION_BUCKET_BINS = [0, 240, 1440, 4320, 10080, 100000]
+COMPLETION_BUCKET_LABELS = ["<4h", "4h-1d", "1d-3d", "3d-7d", ">7d"]
 PALETTE = {
     "pending": "#e9c46a",
     "in_progress": "#3a86ff",
@@ -21,6 +24,7 @@ PALETTE = {
 
 
 def inject_styles() -> None:
+    """Apply a small visual system so the dashboard looks intentional in portfolio mode."""
     st.markdown(
         """
         <style>
@@ -70,11 +74,12 @@ def inject_styles() -> None:
 
 
 def _to_dataframe(tasks: List[Dict]) -> pd.DataFrame:
+    """Normalize API or demo records into a dataframe ready for analysis."""
     if not tasks:
         return pd.DataFrame()
 
     df = pd.DataFrame(tasks)
-    for col in ["created_at", "updated_at", "started_at", "completed_at"]:
+    for col in DATETIME_COLUMNS:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors="coerce")
     df["completion_time_minutes"] = pd.to_numeric(
@@ -84,11 +89,13 @@ def _to_dataframe(tasks: List[Dict]) -> pd.DataFrame:
 
 
 def fetch_tasks_from_api(api_base_url: str, include_archived: bool = True) -> pd.DataFrame:
+    """Load all tasks from the backend using paginated requests."""
     all_tasks = []
     limit = 100
     offset = 0
 
     while True:
+        # The API limits page size to 100 items, so the dashboard walks pages until exhausted.
         response = requests.get(
             f"{api_base_url}/tasks",
             params={
@@ -111,6 +118,7 @@ def fetch_tasks_from_api(api_base_url: str, include_archived: bool = True) -> pd
 
 @st.cache_data
 def build_demo_dataframe(task_count: int = 1200, seed: int = 42) -> pd.DataFrame:
+    """Generate a reproducible demo dataset so Streamlit can run without any backend."""
     random.seed(seed)
     now = datetime.utcnow()
     period_start = now - timedelta(days=365 * 3)
@@ -131,6 +139,7 @@ def build_demo_dataframe(task_count: int = 1200, seed: int = 42) -> pd.DataFrame
 
     rows = []
     for index in range(task_count):
+        # Spread task creation across three years to make trend and seasonality charts believable.
         created_at = period_start + timedelta(
             seconds=random.randint(0, int((now - period_start).total_seconds()))
         )
@@ -182,6 +191,7 @@ def build_demo_dataframe(task_count: int = 1200, seed: int = 42) -> pd.DataFrame
 
 
 def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Add derived columns used by charts and filters without mutating the original source."""
     enriched = df.copy()
     enriched["status"] = pd.Categorical(
         enriched["status"], categories=STATUS_ORDER, ordered=True
@@ -191,8 +201,8 @@ def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     enriched["created_weekday"] = enriched["created_at"].dt.day_name()
     enriched["completion_bucket"] = pd.cut(
         enriched["completion_time_minutes"],
-        bins=[0, 240, 1440, 4320, 10080, 100000],
-        labels=["<4h", "4h-1d", "1d-3d", "3d-7d", ">7d"],
+        bins=COMPLETION_BUCKET_BINS,
+        labels=COMPLETION_BUCKET_LABELS,
         include_lowest=True,
     )
     return enriched
@@ -208,6 +218,7 @@ def filter_dataframe(
     end_date,
     resolution_range: List[int],
 ) -> pd.DataFrame:
+    """Apply the same filter set to every chart so the whole dashboard stays consistent."""
     filtered = df.copy()
     if statuses:
         filtered = filtered[filtered["status"].isin(statuses)]
@@ -233,6 +244,7 @@ def filter_dataframe(
 
 
 def stats_from_df(df: pd.DataFrame) -> Dict[str, float]:
+    """Build the KPI cards displayed at the top of the dashboard."""
     avg_minutes = df["completion_time_minutes"].dropna().mean()
     completion_rate = 0 if df.empty else round(float((df["status"] == "completed").mean() * 100), 1)
     return {
@@ -244,7 +256,26 @@ def stats_from_df(df: pd.DataFrame) -> Dict[str, float]:
     }
 
 
+def add_duration_display_column(
+    df: pd.DataFrame,
+    source_column: str,
+    unit: str,
+    target_column: str = "duration_value",
+) -> Tuple[pd.DataFrame, str, str]:
+    """Create a display column in minutes or hours without altering the source metric."""
+    result = df.copy()
+    result[target_column] = result[source_column]
+    label = "Tiempo de cierre (min)"
+
+    if unit == "Horas":
+        result[target_column] = (result[source_column] / 60).round(2)
+        label = "Tiempo de cierre (h)"
+
+    return result, target_column, label
+
+
 def render_insights(df: pd.DataFrame) -> None:
+    """Surface three quick conclusions so the reader understands the story before the detail."""
     blocked_share = 0 if df.empty else round(float((df["status"] == "blocked").mean() * 100), 1)
     busiest_assignee = (
         df["assigned_to"].value_counts().index[0] if not df["assigned_to"].dropna().empty else "N/A"
@@ -294,18 +325,71 @@ st.markdown(
 )
 
 with st.sidebar:
-    st.header("Fuente")
+    st.header("Panel de control")
+    st.caption("Configura origen, filtros y comportamiento de cada bloque analitico.")
+
+    st.subheader("Fuente de datos")
     data_source = st.radio("Origen de datos", ["Demo local (gratis)", "API remota"], index=0)
     include_archived = st.checkbox("Incluir archivadas", value=True)
     api_url = st.text_input("API base URL", value=API_BASE_URL)
-    st.header("Visualizacion")
-    timeline_granularity = st.selectbox("Agrupar serie temporal por", ["Mes", "Trimestre"], index=0)
-    heatmap_metric = st.selectbox(
-        "Metricas del heatmap",
-        ["Conteo de tareas", "Tiempo medio de cierre"],
-        index=0,
-    )
-    top_n_assignees = st.slider("Top responsables en comparativas", min_value=3, max_value=12, value=7)
+    st.divider()
+
+    with st.expander("Resumen y tiempos", expanded=True):
+        status_chart_style = st.selectbox(
+            "Grafico de estados",
+            ["Barras", "Donut"],
+            index=0,
+        )
+        status_chart_metric = st.selectbox(
+            "Metrica de estados",
+            ["Conteo", "Porcentaje"],
+            index=0,
+        )
+        closure_time_unit = st.selectbox(
+            "Unidad para tiempos medios",
+            ["Minutos", "Horas"],
+            index=1,
+        )
+        boxplot_time_unit = st.selectbox(
+            "Unidad para distribucion de tiempos",
+            ["Minutos", "Horas"],
+            index=1,
+        )
+        top_n_assignees = st.slider(
+            "Top responsables en comparativas",
+            min_value=3,
+            max_value=12,
+            value=7,
+        )
+
+    with st.expander("Evolucion temporal", expanded=False):
+        timeline_granularity = st.selectbox(
+            "Agrupar serie temporal por",
+            ["Mes", "Trimestre"],
+            index=0,
+        )
+        timeline_metric = st.selectbox(
+            "Metrica de serie temporal",
+            ["Todas las tareas", "Solo completadas", "Solo bloqueadas"],
+            index=0,
+        )
+        timeline_style = st.selectbox(
+            "Tipo de serie temporal",
+            ["Area", "Linea"],
+            index=0,
+        )
+
+    with st.expander("Mapa de calor", expanded=False):
+        heatmap_metric = st.selectbox(
+            "Metricas del heatmap",
+            ["Conteo de tareas", "Tiempo medio de cierre"],
+            index=0,
+        )
+        heatmap_grouping = st.selectbox(
+            "Cruce del heatmap",
+            ["Responsable vs estado", "Responsable vs dia de la semana"],
+            index=0,
+        )
 
 if data_source == "Demo local (gratis)":
     df = build_demo_dataframe()
@@ -333,7 +417,8 @@ col4.metric("% cierre", f"{stats['completion_rate']}%")
 col5.metric("Promedio min cierre", stats["avg_completion_minutes"])
 
 with st.sidebar:
-    st.header("Filtros globales")
+    st.divider()
+    st.subheader("Filtros globales")
     status_options = [status for status in STATUS_ORDER if status in df["status"].astype(str).unique()]
     assignee_options = sorted([value for value in df["assigned_to"].dropna().unique().tolist() if value])
     creator_options = sorted([value for value in df["created_by"].dropna().unique().tolist() if value])
@@ -402,13 +487,29 @@ with overview_tab:
             filtered_df["status"].astype(str).value_counts().reindex(STATUS_ORDER, fill_value=0).reset_index()
         )
         status_counts.columns = ["status", "count"]
-        fig_status = px.bar(
-            status_counts,
-            x="status",
-            y="count",
-            color="status",
-            color_discrete_map=PALETTE,
-        )
+        status_counts["percentage"] = (
+            (status_counts["count"] / max(status_counts["count"].sum(), 1)) * 100
+        ).round(2)
+        status_value_column = "count" if status_chart_metric == "Conteo" else "percentage"
+        status_label = "Tareas" if status_chart_metric == "Conteo" else "% del total"
+        if status_chart_style == "Barras":
+            fig_status = px.bar(
+                status_counts,
+                x="status",
+                y=status_value_column,
+                color="status",
+                color_discrete_map=PALETTE,
+                labels={status_value_column: status_label, "status": "Estado"},
+            )
+        else:
+            fig_status = px.pie(
+                status_counts,
+                names="status",
+                values=status_value_column,
+                color="status",
+                color_discrete_map=PALETTE,
+                hole=0.55,
+            )
         fig_status.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
         st.plotly_chart(fig_status, use_container_width=True)
 
@@ -424,12 +525,19 @@ with overview_tab:
                 .sort_values("completion_time_minutes", ascending=False)
                 .head(top_n_assignees)
             )
+            agg, value_column, value_label = add_duration_display_column(
+                agg,
+                source_column="completion_time_minutes",
+                unit=closure_time_unit,
+                target_column="completion_time_value",
+            )
             fig_time = px.bar(
                 agg,
                 x="assigned_to",
-                y="completion_time_minutes",
-                color="completion_time_minutes",
+                y=value_column,
+                color=value_column,
                 color_continuous_scale="Tealgrn",
+                labels={value_column: value_label, "assigned_to": "Responsable"},
             )
             fig_time.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
             st.plotly_chart(fig_time, use_container_width=True)
@@ -439,13 +547,20 @@ with overview_tab:
     if completed_only.empty:
         st.info("No hay tareas completadas dentro del filtro actual.")
     else:
+        completed_only, boxplot_value_column, boxplot_label = add_duration_display_column(
+            completed_only,
+            source_column="completion_time_minutes",
+            unit=boxplot_time_unit,
+            target_column="completion_time_value",
+        )
         fig_box = px.box(
             completed_only,
             x="status",
-            y="completion_time_minutes",
+            y=boxplot_value_column,
             color="status",
             color_discrete_map=PALETTE,
             points="outliers",
+            labels={boxplot_value_column: boxplot_label, "status": "Estado"},
         )
         fig_box.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=360)
         st.plotly_chart(fig_box, use_container_width=True)
@@ -453,19 +568,35 @@ with overview_tab:
 with timeline_tab:
     st.subheader("Evolucion operativa")
     period_column = "created_month" if timeline_granularity == "Mes" else "created_quarter"
+    timeline_source = filtered_df.copy()
+    if timeline_metric == "Solo completadas":
+        timeline_source = timeline_source[timeline_source["status"].astype(str) == "completed"]
+    elif timeline_metric == "Solo bloqueadas":
+        timeline_source = timeline_source[timeline_source["status"].astype(str) == "blocked"]
     timeline = (
-        filtered_df.groupby([period_column, "status"], as_index=False)
+        timeline_source.groupby([period_column, "status"], as_index=False)
         .size()
         .rename(columns={"size": "count"})
     )
-    fig_timeline = px.area(
-        timeline,
-        x=period_column,
-        y="count",
-        color="status",
-        color_discrete_map=PALETTE,
-        category_orders={"status": STATUS_ORDER},
-    )
+    if timeline_style == "Area":
+        fig_timeline = px.area(
+            timeline,
+            x=period_column,
+            y="count",
+            color="status",
+            color_discrete_map=PALETTE,
+            category_orders={"status": STATUS_ORDER},
+        )
+    else:
+        fig_timeline = px.line(
+            timeline,
+            x=period_column,
+            y="count",
+            color="status",
+            color_discrete_map=PALETTE,
+            category_orders={"status": STATUS_ORDER},
+            markers=True,
+        )
     fig_timeline.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=420)
     st.plotly_chart(fig_timeline, use_container_width=True)
 
@@ -492,35 +623,42 @@ with heatmap_tab:
     heatmap_source = filtered_df.copy()
     top_assignees = heatmap_source["assigned_to"].value_counts().head(top_n_assignees).index.tolist()
     heatmap_source = heatmap_source[heatmap_source["assigned_to"].isin(top_assignees)]
+    heatmap_y = "status"
+    heatmap_y_label = "Estado"
+    if heatmap_grouping == "Responsable vs dia de la semana":
+        heatmap_y = "created_weekday"
+        heatmap_y_label = "Dia de la semana"
 
     if heatmap_metric == "Conteo de tareas":
         heatmap = (
-            heatmap_source.groupby(["assigned_to", "status"], as_index=False)
+            heatmap_source.groupby(["assigned_to", heatmap_y], as_index=False)
             .size()
             .rename(columns={"size": "value"})
         )
         fig_heatmap = px.density_heatmap(
             heatmap,
             x="assigned_to",
-            y="status",
+            y=heatmap_y,
             z="value",
             histfunc="avg",
             color_continuous_scale="YlGnBu",
+            labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     else:
         heatmap = (
             heatmap_source.dropna(subset=["completion_time_minutes"])
-            .groupby(["assigned_to", "status"], as_index=False)["completion_time_minutes"]
+            .groupby(["assigned_to", heatmap_y], as_index=False)["completion_time_minutes"]
             .mean()
             .rename(columns={"completion_time_minutes": "value"})
         )
         fig_heatmap = px.density_heatmap(
             heatmap,
             x="assigned_to",
-            y="status",
+            y=heatmap_y,
             z="value",
             histfunc="avg",
             color_continuous_scale="Sunsetdark",
+            labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     fig_heatmap.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=430)
     st.plotly_chart(fig_heatmap, use_container_width=True)

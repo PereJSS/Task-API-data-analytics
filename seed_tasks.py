@@ -72,6 +72,7 @@ DETAILS = [
 
 
 def random_datetime(start: datetime, end: datetime) -> datetime:
+    """Return a random timestamp inside the requested interval."""
     delta_seconds = int((end - start).total_seconds())
     if delta_seconds <= 0:
         return start
@@ -79,6 +80,7 @@ def random_datetime(start: datetime, end: datetime) -> datetime:
 
 
 def build_task(now: datetime, period_start: datetime) -> TaskDB:
+    """Build one realistic demo task with coherent status and duration fields."""
     created_at = random_datetime(period_start, now)
     title = f"{random.choice(TITLE_PREFIX)} {random.choice(TITLE_SUBJECT)}"
     description = random.choice(DETAILS)
@@ -138,6 +140,7 @@ def build_task(now: datetime, period_start: datetime) -> TaskDB:
 
 
 def seed_tasks(task_count: int = 700) -> int:
+    """Insert a batch of demo tasks spanning the last three years."""
     now = datetime.utcnow()
     period_start = now - timedelta(days=365 * 3)
 
@@ -153,5 +156,6 @@ def seed_tasks(task_count: int = 700) -> int:
 
 if __name__ == "__main__":
     random.seed(42)
+    # A fixed seed makes demo deployments reproducible and easier to reason about.
     inserted = seed_tasks(task_count=700)
     print(f"Inserted {inserted} tasks")

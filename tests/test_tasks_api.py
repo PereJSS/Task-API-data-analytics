@@ -12,6 +12,7 @@ client = TestClient(app)
 
 
 def setup_function():
+    """Reset the test database before every test so assertions stay isolated."""
     init_db()
     db = SessionLocal()
     try:

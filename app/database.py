@@ -5,6 +5,7 @@ from app.config import settings
 
 
 def _build_engine_kwargs() -> dict:
+    """Return backend-specific engine options only when they are actually required."""
     if settings.database_url.startswith("sqlite"):
         return {"connect_args": {"check_same_thread": False}}
     return {}
@@ -18,7 +19,7 @@ Base = declarative_base()
 
 
 def ensure_tasks_schema() -> None:
-    """Lightweight schema evolution for SQLite without Alembic."""
+    """Patch legacy SQLite databases when the app starts outside a migration workflow."""
     if not settings.database_url.startswith("sqlite"):
         return
 
@@ -51,6 +52,7 @@ def ensure_tasks_schema() -> None:
 
 
 def get_db():
+    """Yield a database session per request and always close it afterwards."""
     db = SessionLocal()
     try:
         yield db
@@ -59,6 +61,7 @@ def get_db():
 
 
 def init_db() -> None:
+    """Initialize local databases only when auto-init is explicitly enabled."""
     if not settings.auto_init_db:
         return
 
