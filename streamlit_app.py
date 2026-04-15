@@ -116,15 +116,16 @@ def _to_dataframe(tasks: List[Dict]) -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=120, show_spinner=False)
 def fetch_tasks_from_api(api_base_url: str, include_archived: bool = True) -> pd.DataFrame:
     """Load all tasks from the backend using paginated requests."""
     all_tasks = []
-    limit = 100
+    limit = 500
     offset = 0
+    session = requests.Session()
 
     while True:
-        # The API limits page size to 100 items, so the dashboard walks pages until exhausted.
-        response = requests.get(
+        response = session.get(
             f"{api_base_url}/tasks",
             params={
                 "include_archived": str(include_archived).lower(),
@@ -522,6 +523,9 @@ with st.sidebar:
     )
     include_archived = st.checkbox("Incluir archivadas", value=True)
     api_url = st.text_input("API base URL", value=API_BASE_URL)
+    if data_source == "API remota" and st.button("Recargar datos API", use_container_width=True):
+        fetch_tasks_from_api.clear()
+        st.rerun()
     write_api_key = st.text_input(
         "Clave de escritura",
         value=WRITE_API_KEY,
@@ -593,7 +597,8 @@ if data_source == "Demo local (gratis)":
         df = df[df["archived"] == False]  # noqa: E712
 else:
     try:
-        df = fetch_tasks_from_api(api_url.rstrip("/"), include_archived=include_archived)
+        with st.spinner("Cargando datos desde la API..."):
+            df = fetch_tasks_from_api(api_url.rstrip("/"), include_archived=include_archived)
     except requests.RequestException as exc:
         st.error(f"No se pudo conectar con la API: {exc}")
         st.stop()

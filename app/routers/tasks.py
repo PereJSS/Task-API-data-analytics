@@ -46,7 +46,7 @@ def list_tasks(
     assigned_to: Optional[str] = Query(default=None, min_length=1, max_length=120),
     search: Optional[str] = Query(default=None, min_length=1, max_length=120),
     include_archived: bool = Query(default=False),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
