@@ -12,6 +12,12 @@ pinned: false
 
 API REST para gestion de tareas con FastAPI, SQLAlchemy, SQLite y dashboard analitico en Streamlit.
 
+## Demo publica
+
+- API publica: https://perejss-taskflow-api.hf.space
+- Endpoints utiles: `/health`, `/docs`, `/tasks`, `/tasks/stats/summary`
+- Dashboard Streamlit: configura `TASKFLOW_API_BASE_URL` con la URL de la API publica y cambia la fuente a `API remota`
+
 ## Resumen
 
 El proyecto incluye:
@@ -122,7 +128,9 @@ Incluye:
 
 - Filtros globales por estado, responsable, creador, fecha, texto y tiempo de cierre.
 - Graficos de distribucion, serie temporal, boxplot y mapa de calor.
+- Visualizacion de tiempos en minutos, horas o dias.
 - Seccion de insights automatizados para lectura ejecutiva.
+- Formulario para crear tareas cuando se usa `API remota`.
 - Descarga CSV de los datos filtrados.
 
 ## Despliegue gratuito (opcion recomendada)

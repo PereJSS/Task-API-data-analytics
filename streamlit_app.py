@@ -168,7 +168,9 @@ def build_demo_dataframe(task_count: int = 1200, seed: int = 42) -> pd.DataFrame
                     1,
                 )
 
-        updated_at = max([date for date in [created_at, started_at, completed_at] if date is not None])
+        updated_at = max(
+            [date for date in [created_at, started_at, completed_at] if date is not None]
+        )
         rows.append(
             {
                 "id": f"demo-{index + 1}",
@@ -262,7 +264,7 @@ def add_duration_display_column(
     unit: str,
     target_column: str = "duration_value",
 ) -> Tuple[pd.DataFrame, str, str]:
-    """Create a display column in minutes or hours without altering the source metric."""
+    """Create a display column in minutes, hours or days without altering the source metric."""
     result = df.copy()
     result[target_column] = result[source_column]
     label = "Tiempo de cierre (min)"
@@ -270,8 +272,29 @@ def add_duration_display_column(
     if unit == "Horas":
         result[target_column] = (result[source_column] / 60).round(2)
         label = "Tiempo de cierre (h)"
+    elif unit == "Dias":
+        result[target_column] = (result[source_column] / 1440).round(2)
+        label = "Tiempo de cierre (dias)"
 
     return result, target_column, label
+
+
+def format_duration_value(minutes: float, unit: str) -> str:
+    """Format a duration KPI using the requested display unit."""
+    if pd.isna(minutes):
+        return "N/A"
+
+    if unit == "Horas":
+        return f"{round(float(minutes) / 60, 2)} h"
+    if unit == "Dias":
+        return f"{round(float(minutes) / 1440, 2)} d"
+    return f"{round(float(minutes), 2)} min"
+
+
+def create_task_from_streamlit(api_base_url: str, payload: Dict) -> None:
+    """Send one new task to the backend and surface the result to the user."""
+    response = requests.post(f"{api_base_url}/tasks", json=payload, timeout=10)
+    response.raise_for_status()
 
 
 def render_insights(df: pd.DataFrame) -> None:
@@ -313,10 +336,17 @@ inject_styles()
 st.markdown(
     """
     <div class="hero-card">
-      <div style="font-size:0.8rem; letter-spacing:0.08em; color:#5c677d; text-transform:uppercase;">Operations Intelligence</div>
-      <div style="font-size:2.2rem; font-weight:800; color:#1d3557; margin-top:0.2rem;">TaskFlow Analytics</div>
+            <div
+                style="font-size:0.8rem; letter-spacing:0.08em; color:#5c677d;"
+            >
+                Operations Intelligence
+            </div>
+            <div
+                style="font-size:2.2rem; font-weight:800; color:#1d3557; margin-top:0.2rem;"
+            >TaskFlow Analytics</div>
       <div style="font-size:1rem; color:#4a5568; max-width:760px; margin-top:0.4rem;">
-        Dashboard orientado a portfolio para analizar carga operativa, tiempos de resolucion y cuellos de botella.
+                Dashboard orientado a portfolio para analizar carga operativa,
+                tiempos de resolucion y cuellos de botella.
         Funciona gratis en modo demo o conectado a una API real.
       </div>
     </div>
@@ -347,13 +377,13 @@ with st.sidebar:
         )
         closure_time_unit = st.selectbox(
             "Unidad para tiempos medios",
-            ["Minutos", "Horas"],
-            index=1,
+            ["Minutos", "Horas", "Dias"],
+            index=2,
         )
         boxplot_time_unit = st.selectbox(
             "Unidad para distribucion de tiempos",
-            ["Minutos", "Horas"],
-            index=1,
+            ["Minutos", "Horas", "Dias"],
+            index=2,
         )
         top_n_assignees = st.slider(
             "Top responsables en comparativas",
@@ -408,20 +438,31 @@ if df.empty:
 
 df = enrich_dataframe(df)
 stats = stats_from_df(df)
+avg_completion_label = "Promedio cierre"
+avg_completion_value = format_duration_value(
+    stats["avg_completion_minutes"],
+    closure_time_unit,
+)
 
 col1, col2, col3, col4, col5 = st.columns(5)
 col1.metric("Total", stats["total"])
 col2.metric("Completadas", stats["completed"])
 col3.metric("Pendientes", stats["pending"])
 col4.metric("% cierre", f"{stats['completion_rate']}%")
-col5.metric("Promedio min cierre", stats["avg_completion_minutes"])
+col5.metric(avg_completion_label, avg_completion_value)
 
 with st.sidebar:
     st.divider()
     st.subheader("Filtros globales")
-    status_options = [status for status in STATUS_ORDER if status in df["status"].astype(str).unique()]
-    assignee_options = sorted([value for value in df["assigned_to"].dropna().unique().tolist() if value])
-    creator_options = sorted([value for value in df["created_by"].dropna().unique().tolist() if value])
+    status_options = [
+        status for status in STATUS_ORDER if status in df["status"].astype(str).unique()
+    ]
+    assignee_options = sorted(
+        [value for value in df["assigned_to"].dropna().unique().tolist() if value]
+    )
+    creator_options = sorted(
+        [value for value in df["created_by"].dropna().unique().tolist() if value]
+    )
     selected_status = st.multiselect("Estado", options=status_options, default=status_options)
     selected_assignees = st.multiselect("Responsable", options=assignee_options, default=[])
     selected_creators = st.multiselect("Creador", options=creator_options, default=[])
@@ -484,7 +525,11 @@ with overview_tab:
     with overview_left:
         st.subheader("Distribucion por estado")
         status_counts = (
-            filtered_df["status"].astype(str).value_counts().reindex(STATUS_ORDER, fill_value=0).reset_index()
+            filtered_df["status"]
+            .astype(str)
+            .value_counts()
+            .reindex(STATUS_ORDER, fill_value=0)
+            .reset_index()
         )
         status_counts.columns = ["status", "count"]
         status_counts["percentage"] = (
@@ -621,7 +666,9 @@ with timeline_tab:
 with heatmap_tab:
     st.subheader("Mapa de calor de carga operativa")
     heatmap_source = filtered_df.copy()
-    top_assignees = heatmap_source["assigned_to"].value_counts().head(top_n_assignees).index.tolist()
+    top_assignees = (
+        heatmap_source["assigned_to"].value_counts().head(top_n_assignees).index.tolist()
+    )
     heatmap_source = heatmap_source[heatmap_source["assigned_to"].isin(top_assignees)]
     heatmap_y = "status"
     heatmap_y_label = "Estado"
@@ -696,3 +743,37 @@ with detail_tab:
         use_container_width=True,
         hide_index=True,
     )
+
+    if data_source == "API remota":
+        st.divider()
+        st.subheader("Crear tarea en la API")
+        with st.form("create_task_form"):
+            form_col1, form_col2 = st.columns(2)
+            with form_col1:
+                new_title = st.text_input("Titulo")
+                new_description = st.text_area("Descripcion")
+                new_created_by = st.text_input("Creado por")
+            with form_col2:
+                new_assigned_to = st.text_input("Responsable")
+                new_status = st.selectbox("Estado inicial", STATUS_ORDER, index=0)
+                new_archived = st.checkbox("Crear como archivada", value=False)
+
+            submitted = st.form_submit_button("Crear tarea")
+
+        if submitted:
+            payload = {
+                "title": new_title,
+                "description": new_description or None,
+                "created_by": new_created_by or None,
+                "assigned_to": new_assigned_to or None,
+                "status": new_status,
+                "completed": new_status == "completed",
+                "archived": new_archived,
+            }
+            try:
+                create_task_from_streamlit(api_url.rstrip("/"), payload)
+                st.success(
+                    "Tarea creada correctamente. Recarga la pagina para verla en las graficas."
+                )
+            except requests.RequestException as exc:
+                st.error(f"No se pudo crear la tarea: {exc}")
