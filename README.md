@@ -111,6 +111,7 @@ Variables soportadas:
 - `TASKFLOW_DATABASE_URL`: URL de base de datos SQLite o Postgres.
 - `TASKFLOW_API_BASE_URL`: URL base que usara Streamlit para consultar la API.
 - `TASKFLOW_AUTO_INIT_DB`: controla la inicializacion automatica de esquema al arrancar.
+- `TASKFLOW_WRITE_API_KEY`: clave opcional para habilitar escritura en despliegues protegidos.
 
 Puedes partir de [.env.example](.env.example).
 
@@ -168,6 +169,16 @@ Incluye:
 - Formulario para crear tareas cuando se usa `API remota`.
 - Descarga CSV de los datos filtrados.
 
+## Guia rapida de demo
+
+Si quieres ensenar el proyecto en una entrevista o portfolio, el recorrido mas util suele ser este:
+
+1. Abrir la API publica y mostrar `health` y `docs`.
+2. Entrar al dashboard y ensenar los KPIs de trabajo activo, mediana y P90 de cierre.
+3. Filtrar por responsable o estado para mostrar que la historia analitica cambia en tiempo real.
+4. Revisar el heatmap y el scatter de antiguedad frente a tiempo de cierre.
+5. Terminar mostrando que el backend y el dashboard estan desplegados gratis y conectados a datos reales.
+
 ## Despliegue gratuito (opcion recomendada)
 
 Puedes publicar solo el dashboard en Streamlit Community Cloud sin coste:
@@ -191,6 +202,7 @@ Si quieres mantener el dashboard gratis pero conectado a una API real:
 TASKFLOW_ENV=production
 TASKFLOW_DATABASE_URL=<connection string de Supabase>
 TASKFLOW_AUTO_INIT_DB=false
+TASKFLOW_WRITE_API_KEY=<clave-opcional-para-escritura>
 PORT=7860
 ```
 
@@ -208,6 +220,12 @@ https://tu-space.hf.space
 ```
 
 6. En la app, cambia la fuente a `API remota`.
+
+Si defines `TASKFLOW_WRITE_API_KEY`:
+
+- `POST`, `PUT` y `DELETE` quedaran protegidos en la API.
+- para crear tareas desde Streamlit tendras que configurar esa misma clave en el dashboard.
+- si no defines clave en produccion, la API quedara en modo solo lectura.
 
 Notas practicas:
 

@@ -14,6 +14,7 @@ class Settings:
         raw_api_base_url = os.getenv("TASKFLOW_API_BASE_URL", "http://127.0.0.1:8000")
         self.streamlit_api_base_url = self._normalize_http_url(raw_api_base_url)
         self.auto_init_db = os.getenv("TASKFLOW_AUTO_INIT_DB", "true").lower() == "true"
+        self.write_api_key = os.getenv("TASKFLOW_WRITE_API_KEY", "").strip()
 
     @staticmethod
     def _normalize_database_url(database_url: str) -> str:

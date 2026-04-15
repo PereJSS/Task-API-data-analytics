@@ -10,6 +10,7 @@ import streamlit as st
 from app.config import settings
 
 API_BASE_URL = settings.streamlit_api_base_url
+WRITE_API_KEY = settings.write_api_key
 STATUS_ORDER = ["pending", "in_progress", "blocked", "completed", "cancelled"]
 WEEKDAY_ORDER = [
     "Monday",
@@ -310,9 +311,14 @@ def format_duration_value(minutes: float, unit: str) -> str:
     return f"{round(float(minutes), 2)} min"
 
 
-def create_task_from_streamlit(api_base_url: str, payload: Dict) -> None:
+def create_task_from_streamlit(api_base_url: str, payload: Dict, api_key: str) -> None:
     """Send one new task to the backend and surface the result to the user."""
-    response = requests.post(f"{api_base_url}/tasks", json=payload, timeout=10)
+    response = requests.post(
+        f"{api_base_url}/tasks",
+        json=payload,
+        headers={"X-API-Key": api_key},
+        timeout=10,
+    )
     response.raise_for_status()
 
 
@@ -396,6 +402,12 @@ with st.sidebar:
     data_source = st.radio("Origen de datos", ["Demo local (gratis)", "API remota"], index=0)
     include_archived = st.checkbox("Incluir archivadas", value=True)
     api_url = st.text_input("API base URL", value=API_BASE_URL)
+    write_api_key = st.text_input(
+        "Clave de escritura",
+        value=WRITE_API_KEY,
+        type="password",
+        help="Solo necesaria para crear, editar o archivar tareas en despliegues protegidos.",
+    )
     st.divider()
 
     with st.expander("Resumen y tiempos", expanded=True):
@@ -843,37 +855,44 @@ with detail_tab:
     if data_source == "API remota":
         st.divider()
         st.subheader("Crear tarea en la API")
-        with st.form("create_task_form"):
-            form_col1, form_col2 = st.columns(2)
-            with form_col1:
-                new_title = st.text_input("Titulo")
-                new_description = st.text_area("Descripcion")
-                new_created_by = st.text_input("Creado por")
-            with form_col2:
-                new_assigned_to = st.text_input("Responsable")
-                new_status = st.selectbox("Estado inicial", STATUS_ORDER, index=0)
-                new_archived = st.checkbox("Crear como archivada", value=False)
+        if not write_api_key:
+            st.info("Modo solo lectura: configura una clave de escritura para crear tareas.")
+        else:
+            with st.form("create_task_form"):
+                form_col1, form_col2 = st.columns(2)
+                with form_col1:
+                    new_title = st.text_input("Titulo")
+                    new_description = st.text_area("Descripcion")
+                    new_created_by = st.text_input("Creado por")
+                with form_col2:
+                    new_assigned_to = st.text_input("Responsable")
+                    new_status = st.selectbox("Estado inicial", STATUS_ORDER, index=0)
+                    new_archived = st.checkbox("Crear como archivada", value=False)
 
-            submitted = st.form_submit_button("Crear tarea")
+                submitted = st.form_submit_button("Crear tarea")
 
-        if submitted:
-            if not new_title.strip():
-                st.error("El titulo es obligatorio.")
-                st.stop()
-            payload = {
-                "title": new_title.strip(),
-                "description": new_description or None,
-                "created_by": new_created_by or None,
-                "assigned_to": new_assigned_to or None,
-                "status": new_status,
-                "completed": new_status == "completed",
-                "archived": new_archived,
-            }
-            try:
-                create_task_from_streamlit(api_url.rstrip("/"), payload)
-                st.success(
-                    "Tarea creada correctamente. Recarga la pagina para verla en las graficas."
-                )
-                st.rerun()
-            except requests.RequestException as exc:
-                st.error(f"No se pudo crear la tarea: {exc}")
+            if submitted:
+                if not new_title.strip():
+                    st.error("El titulo es obligatorio.")
+                    st.stop()
+                payload = {
+                    "title": new_title.strip(),
+                    "description": new_description or None,
+                    "created_by": new_created_by or None,
+                    "assigned_to": new_assigned_to or None,
+                    "status": new_status,
+                    "completed": new_status == "completed",
+                    "archived": new_archived,
+                }
+                try:
+                    create_task_from_streamlit(
+                        api_url.rstrip("/"),
+                        payload,
+                        write_api_key,
+                    )
+                    st.success(
+                        "Tarea creada correctamente. Recarga la pagina para verla en las graficas."
+                    )
+                    st.rerun()
+                except requests.RequestException as exc:
+                    st.error(f"No se pudo crear la tarea: {exc}")

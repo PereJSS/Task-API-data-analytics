@@ -1,17 +1,40 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import crud
+from app.config import settings
 from app.database import get_db
 from app.schemas import TaskCreate, TaskResponse, TaskStats, TaskStatus, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
 
+def require_write_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
+    """Protect write endpoints in deployed environments while keeping reads public."""
+    if settings.environment != "production" and not settings.write_api_key:
+        return
+
+    if not settings.write_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Write operations are disabled on this deployment",
+        )
+
+    if x_api_key != settings.write_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+        )
+
+
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
-def create_task(payload: TaskCreate, db: Session = Depends(get_db)):
+def create_task(
+    payload: TaskCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_api_key),
+):
     """Create a task record."""
     return crud.create_task(db, payload)
 
@@ -54,7 +77,12 @@ def get_task(
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
-def update_task(task_id: str, payload: TaskUpdate, db: Session = Depends(get_db)):
+def update_task(
+    task_id: str,
+    payload: TaskUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_api_key),
+):
     """Update an existing task using a partial payload."""
     db_task = crud.get_task(db, task_id)
     if not db_task:
@@ -67,7 +95,11 @@ def update_task(task_id: str, payload: TaskUpdate, db: Session = Depends(get_db)
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def archive_task(task_id: str, db: Session = Depends(get_db)):
+def archive_task(
+    task_id: str,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_write_api_key),
+):
     """Soft delete a task."""
     db_task = crud.get_task(db, task_id)
     if not db_task:
