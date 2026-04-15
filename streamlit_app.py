@@ -438,6 +438,145 @@ def build_pdf_report(
     return pdf_buffer.getvalue()
 
 
+def build_export_figures(
+    df: pd.DataFrame,
+    top_n_assignees: int,
+    status_chart_style: str,
+    status_chart_metric: str,
+    closure_time_unit: str,
+    timeline_granularity: str,
+    timeline_metric: str,
+    timeline_style: str,
+    heatmap_metric: str,
+    heatmap_grouping: str,
+) -> Dict[str, Figure]:
+    """Build a representative chart pack only when the user requests exports."""
+    export_figures: Dict[str, Figure] = {}
+
+    status_counts = (
+        df["status"].astype(str).value_counts().reindex(STATUS_ORDER, fill_value=0).reset_index()
+    )
+    status_counts.columns = ["status", "count"]
+    status_counts["percentage"] = (
+        (status_counts["count"] / max(status_counts["count"].sum(), 1)) * 100
+    ).round(2)
+    status_value_column = "count" if status_chart_metric == "Conteo" else "percentage"
+    if status_chart_style == "Barras":
+        fig_status = px.bar(
+            status_counts,
+            x="status",
+            y=status_value_column,
+            color="status",
+            color_discrete_map=PALETTE,
+        )
+    else:
+        fig_status = px.pie(
+            status_counts,
+            names="status",
+            values=status_value_column,
+            color="status",
+            color_discrete_map=PALETTE,
+            hole=0.55,
+        )
+    export_figures["status_distribution"] = fig_status
+
+    close_times = df.dropna(subset=["assigned_to", "completion_time_minutes"])
+    if not close_times.empty:
+        assignee_time = (
+            close_times.groupby("assigned_to", as_index=False)["completion_time_minutes"]
+            .mean()
+            .sort_values("completion_time_minutes", ascending=False)
+            .head(top_n_assignees)
+        )
+        assignee_time, value_column, _ = add_duration_display_column(
+            assignee_time,
+            source_column="completion_time_minutes",
+            unit=closure_time_unit,
+            target_column="completion_time_value",
+        )
+        export_figures["closure_time_by_assignee"] = px.bar(
+            assignee_time,
+            x="assigned_to",
+            y=value_column,
+            color=value_column,
+            color_continuous_scale="Tealgrn",
+        )
+
+    period_column = "created_month" if timeline_granularity == "Mes" else "created_quarter"
+    timeline_source = df.copy()
+    if timeline_metric == "Solo completadas":
+        timeline_source = timeline_source[timeline_source["status"].astype(str) == "completed"]
+    elif timeline_metric == "Solo bloqueadas":
+        timeline_source = timeline_source[timeline_source["status"].astype(str) == "blocked"]
+    timeline = (
+        timeline_source.groupby([period_column, "status"], as_index=False)
+        .size()
+        .rename(columns={"size": "count"})
+    )
+    if timeline_style == "Area":
+        export_figures["timeline"] = px.area(
+            timeline,
+            x=period_column,
+            y="count",
+            color="status",
+            color_discrete_map=PALETTE,
+            category_orders={"status": STATUS_ORDER},
+        )
+    else:
+        export_figures["timeline"] = px.line(
+            timeline,
+            x=period_column,
+            y="count",
+            color="status",
+            color_discrete_map=PALETTE,
+            category_orders={"status": STATUS_ORDER},
+            markers=True,
+        )
+
+    heatmap_source = df.copy()
+    top_assignees = (
+        heatmap_source["assigned_to"].value_counts().head(top_n_assignees).index.tolist()
+    )
+    heatmap_source = heatmap_source[heatmap_source["assigned_to"].isin(top_assignees)]
+    heatmap_y = "status"
+    if heatmap_grouping == "Responsable vs dia de la semana":
+        heatmap_y = "created_weekday"
+
+    if heatmap_metric == "Conteo de tareas":
+        heatmap = (
+            heatmap_source.groupby(["assigned_to", heatmap_y], as_index=False)
+            .size()
+            .rename(columns={"size": "value"})
+        )
+        export_figures["heatmap"] = px.density_heatmap(
+            heatmap,
+            x="assigned_to",
+            y=heatmap_y,
+            z="value",
+            histfunc="avg",
+            color_continuous_scale="YlGnBu",
+            category_orders={"created_weekday": WEEKDAY_ORDER},
+        )
+    else:
+        heatmap = (
+            heatmap_source.dropna(subset=["completion_time_minutes"])
+            .groupby(["assigned_to", heatmap_y], as_index=False)["completion_time_minutes"]
+            .mean()
+            .rename(columns={"completion_time_minutes": "value"})
+        )
+        export_figures["heatmap"] = px.density_heatmap(
+            heatmap,
+            x="assigned_to",
+            y=heatmap_y,
+            z="value",
+            histfunc="avg",
+            color_continuous_scale="Sunsetdark",
+            category_orders={"created_weekday": WEEKDAY_ORDER},
+        )
+
+    return export_figures
+
+
 def render_insights(df: pd.DataFrame) -> None:
     """Surface three quick conclusions so the reader understands the story before the detail."""
     blocked_share = 0 if df.empty else round(float((df["status"] == "blocked").mean() * 100), 1)
@@ -688,13 +827,16 @@ st.download_button(
     mime="text/csv",
 )
 
-export_figures: Dict[str, Figure] = {}
-
-overview_tab, timeline_tab, heatmap_tab, detail_tab = st.tabs(
-    ["Resumen", "Evolucion", "Mapa de calor", "Detalle"]
+active_view = st.radio(
+    "Vista activa",
+    ["Resumen", "Evolucion", "Mapa de calor", "Detalle"],
+    horizontal=True,
+    label_visibility="collapsed",
 )
 
-with overview_tab:
+export_figures: Dict[str, Figure] = {}
+
+if active_view == "Resumen":
     overview_left, overview_right = st.columns(2)
     with overview_left:
         st.subheader("Distribucion por estado")
@@ -821,10 +963,9 @@ with overview_tab:
             margin=dict(l=10, r=10, t=30, b=10),
             height=340,
         )
-        export_figures["completion_rate_by_assignee"] = fig_completion_rate
         st.plotly_chart(fig_completion_rate, use_container_width=True)
 
-with timeline_tab:
+elif active_view == "Evolucion":
     st.subheader("Evolucion operativa")
     period_column = "created_month" if timeline_granularity == "Mes" else "created_quarter"
     timeline_source = filtered_df.copy()
@@ -857,7 +998,6 @@ with timeline_tab:
             markers=True,
         )
     fig_timeline.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=420)
-    export_figures["timeline"] = fig_timeline
     st.plotly_chart(fig_timeline, use_container_width=True)
 
     st.subheader("Carga por creador")
@@ -876,7 +1016,6 @@ with timeline_tab:
         color_discrete_sequence=["#1d3557"],
     )
     fig_creators.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=320)
-    export_figures["creator_load"] = fig_creators
     st.plotly_chart(fig_creators, use_container_width=True)
 
     st.subheader("Antiguedad vs tiempo de cierre")
@@ -900,10 +1039,9 @@ with timeline_tab:
             },
         )
         fig_ageing.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
-        export_figures["ageing_vs_closure"] = fig_ageing
         st.plotly_chart(fig_ageing, use_container_width=True)
 
-with heatmap_tab:
+elif active_view == "Mapa de calor":
     st.subheader("Mapa de calor de carga operativa")
     heatmap_source = filtered_df.copy()
     top_assignees = (
@@ -950,7 +1088,6 @@ with heatmap_tab:
             labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     fig_heatmap.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=430)
-    export_figures["heatmap"] = fig_heatmap
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
     st.subheader("Matriz de duracion por tramos")
@@ -972,10 +1109,9 @@ with heatmap_tab:
             color_continuous_scale="Mint",
         )
         fig_duration.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=350)
-        export_figures["duration_matrix"] = fig_duration
         st.plotly_chart(fig_duration, use_container_width=True)
 
-with detail_tab:
+elif active_view == "Detalle":
     st.subheader("Resumen filtrado")
     dcol1, dcol2, dcol3, dcol4 = st.columns(4)
     dcol1.metric("Tareas filtradas", int(filtered_df.shape[0]))
@@ -990,6 +1126,18 @@ with detail_tab:
 
     st.divider()
     st.subheader("Exportacion")
+    export_figures = build_export_figures(
+        df=filtered_df,
+        top_n_assignees=top_n_assignees,
+        status_chart_style=status_chart_style,
+        status_chart_metric=status_chart_metric,
+        closure_time_unit=closure_time_unit,
+        timeline_granularity=timeline_granularity,
+        timeline_metric=timeline_metric,
+        timeline_style=timeline_style,
+        heatmap_metric=heatmap_metric,
+        heatmap_grouping=heatmap_grouping,
+    )
     pdf_report = build_pdf_report(
         stats=stats,
         df=filtered_df,
