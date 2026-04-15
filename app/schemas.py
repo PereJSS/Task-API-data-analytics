@@ -28,7 +28,10 @@ class TaskBase(BaseModel):
 class TaskCreate(TaskBase):
     """Payload required to create a new task."""
 
-    pass
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    archived: bool = False
 
 
 class TaskUpdate(BaseModel):

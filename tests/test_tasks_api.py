@@ -1,12 +1,14 @@
 import os
 
+import pytest
 from fastapi.testclient import TestClient
 
-os.environ.setdefault("TASKFLOW_DATABASE_URL", "sqlite:///./test_tasks.db")
-
+from app.config import Settings
 from app.database import SessionLocal, init_db
 from app.main import app
 from app.models import TaskDB
+
+os.environ.setdefault("TASKFLOW_DATABASE_URL", "sqlite:///./test_tasks.db")
 
 client = TestClient(app)
 
@@ -62,6 +64,31 @@ def test_create_and_get_task():
     assert data["created_by"] == payload["created_by"]
     assert data["assigned_to"] == payload["assigned_to"]
     assert data["status"] == payload["status"]
+
+
+def test_create_task_accepts_historical_dates():
+    payload = {
+        "title": "Importar historico",
+        "description": "Carga inicial",
+        "created_by": "Pere",
+        "assigned_to": "DataOps",
+        "status": "completed",
+        "completed": True,
+        "created_at": "2024-01-10T09:00:00",
+        "started_at": "2024-01-10T10:00:00",
+        "completed_at": "2024-01-11T10:30:00",
+        "archived": True,
+    }
+
+    response = client.post("/tasks", json=payload)
+    assert response.status_code == 201
+
+    data = response.json()
+    assert data["archived"] is True
+    assert data["created_at"].startswith("2024-01-10T09:00:00")
+    assert data["started_at"].startswith("2024-01-10T10:00:00")
+    assert data["completed_at"].startswith("2024-01-11T10:30:00")
+    assert data["completion_time_minutes"] == 1470
 
 
 def test_archive_task_hides_from_default_list():
@@ -123,3 +150,15 @@ def test_stats_return_real_pending_count():
     stats = response.json()
     assert stats["pending"] == 1
     assert stats["blocked"] == 1
+
+
+def test_normalize_database_url_strips_quotes_and_uses_psycopg_driver():
+    normalized = Settings._normalize_database_url('"postgresql://user:secret@db.example.com:5432/postgres"')
+    assert normalized == "postgresql+psycopg://user:secret@db.example.com:5432/postgres"
+
+
+def test_normalize_database_url_rejects_placeholder_values():
+    with pytest.raises(ValueError, match="marcadores de ejemplo"):
+        Settings._normalize_database_url(
+            "postgresql://postgres:[YOUR-PASSWORD]@db.example.com:5432/postgres"
+        )

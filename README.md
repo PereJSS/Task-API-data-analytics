@@ -151,6 +151,12 @@ TASKFLOW_AUTO_INIT_DB=false
 PORT=7860
 ```
 
+Importante:
+
+- `TASKFLOW_DATABASE_URL` debe ser la cadena completa de Postgres, no tu password suelta.
+- No pegues placeholders como `<connection string de Supabase>` o `[YOUR-PASSWORD]`.
+- Si tu password contiene caracteres especiales como `@`, `:`, `/` o `#`, usa la version URL-encoded que te da Supabase o codificala antes de pegarla en la URL.
+
 4. El contenedor de la API arrancara con [Dockerfile](Dockerfile) y ejecutara migraciones antes de levantar FastAPI.
 5. En Streamlit Community Cloud, define `TASKFLOW_API_BASE_URL` con la URL publica del Space, por ejemplo:
 
@@ -164,7 +170,8 @@ Notas practicas:
 
 - Hugging Face Spaces gratuito puede dormir la API cuando no se usa.
 - Supabase free tier es suficiente para demo y portfolio, no para carga real.
-- Para Supabase, usa preferiblemente la cadena de conexion de pooler o la connection string directa de Postgres segun su panel.
+- Para Supabase, usa preferiblemente la cadena de conexion del Session pooler. En Hugging Face Spaces el host directo `db.<project-ref>.supabase.co:5432` puede resolver a IPv6 y fallar con errores como `Network is unreachable`.
+- Si usas el pooler, la URL suele tener esta forma: `postgresql://postgres.<project-ref>:<password-url-encoded>@aws-0-<region>.pooler.supabase.com:6543/postgres?sslmode=require`
 
 ## Docker
 

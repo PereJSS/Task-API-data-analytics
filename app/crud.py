@@ -46,6 +46,14 @@ def create_task(db: Session, payload: TaskCreate) -> TaskDB:
 
     _sync_completion_fields(db_task, was_completed=False)
 
+    updated_candidates = [
+        candidate
+        for candidate in [db_task.created_at, db_task.started_at, db_task.completed_at]
+        if candidate is not None
+    ]
+    if updated_candidates:
+        db_task.updated_at = max(updated_candidates)
+
     db.add(db_task)
     db.commit()
     db.refresh(db_task)
