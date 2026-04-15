@@ -11,6 +11,15 @@ from app.config import settings
 
 API_BASE_URL = settings.streamlit_api_base_url
 STATUS_ORDER = ["pending", "in_progress", "blocked", "completed", "cancelled"]
+WEEKDAY_ORDER = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+]
 DATETIME_COLUMNS = ["created_at", "updated_at", "started_at", "completed_at"]
 COMPLETION_BUCKET_BINS = [0, 240, 1440, 4320, 10080, 100000]
 COMPLETION_BUCKET_LABELS = ["<4h", "4h-1d", "1d-3d", "3d-7d", ">7d"]
@@ -201,6 +210,16 @@ def enrich_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     enriched["created_month"] = enriched["created_at"].dt.to_period("M").astype(str)
     enriched["created_quarter"] = enriched["created_at"].dt.to_period("Q").astype(str)
     enriched["created_weekday"] = enriched["created_at"].dt.day_name()
+    enriched["created_weekday"] = pd.Categorical(
+        enriched["created_weekday"], categories=WEEKDAY_ORDER, ordered=True
+    )
+    enriched["completion_time_days"] = (enriched["completion_time_minutes"] / 1440).round(2)
+    enriched["task_age_days"] = (
+        (pd.Timestamp.utcnow().tz_localize(None) - enriched["created_at"])
+        .dt.total_seconds()
+        .div(86400)
+        .round(2)
+    )
     enriched["completion_bucket"] = pd.cut(
         enriched["completion_time_minutes"],
         bins=COMPLETION_BUCKET_BINS,
@@ -329,6 +348,21 @@ def render_insights(df: pd.DataFrame) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_portfolio_summary(df: pd.DataFrame) -> None:
+    """Summarize business-facing signals that help explain the operational picture quickly."""
+    completed = df[df["status"].astype(str) == "completed"]
+    completion_days = completed["completion_time_days"].dropna()
+    median_days = round(float(completion_days.median()), 2) if not completion_days.empty else 0
+    p90_days = round(float(completion_days.quantile(0.9)), 2) if not completion_days.empty else 0
+    active_work = int(df["status"].astype(str).isin(["pending", "in_progress", "blocked"]).sum())
+
+    st.markdown("### Lectura ejecutiva")
+    exec_col1, exec_col2, exec_col3 = st.columns(3)
+    exec_col1.metric("Trabajo activo", active_work)
+    exec_col2.metric("Mediana cierre", f"{median_days} d")
+    exec_col3.metric("P90 cierre", f"{p90_days} d")
 
 
 st.set_page_config(page_title="TaskFlow Analytics", layout="wide")
@@ -507,6 +541,7 @@ if filtered_df.empty:
     st.stop()
 
 render_insights(filtered_df)
+render_portfolio_summary(filtered_df)
 
 csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
 st.download_button(
@@ -610,6 +645,42 @@ with overview_tab:
         fig_box.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=360)
         st.plotly_chart(fig_box, use_container_width=True)
 
+    st.subheader("Tasa de cierre por responsable")
+    assignee_status = filtered_df.dropna(subset=["assigned_to"]).copy()
+    if assignee_status.empty:
+        st.info("No hay responsables suficientes para comparar tasa de cierre.")
+    else:
+        assignee_kpis = (
+            assignee_status.groupby("assigned_to")
+            .agg(
+                total=("id", "count"),
+                completed=("completed", "sum"),
+            )
+            .reset_index()
+        )
+        assignee_kpis["completion_rate"] = (
+            assignee_kpis["completed"] / assignee_kpis["total"] * 100
+        ).round(1)
+        assignee_kpis = assignee_kpis.sort_values("completion_rate", ascending=False).head(
+            top_n_assignees
+        )
+        fig_completion_rate = px.bar(
+            assignee_kpis,
+            x="assigned_to",
+            y="completion_rate",
+            color="completion_rate",
+            color_continuous_scale="Blues",
+            labels={
+                "assigned_to": "Responsable",
+                "completion_rate": "% de cierre",
+            },
+        )
+        fig_completion_rate.update_layout(
+            margin=dict(l=10, r=10, t=30, b=10),
+            height=340,
+        )
+        st.plotly_chart(fig_completion_rate, use_container_width=True)
+
 with timeline_tab:
     st.subheader("Evolucion operativa")
     period_column = "created_month" if timeline_granularity == "Mes" else "created_quarter"
@@ -663,6 +734,29 @@ with timeline_tab:
     fig_creators.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=320)
     st.plotly_chart(fig_creators, use_container_width=True)
 
+    st.subheader("Antiguedad vs tiempo de cierre")
+    ageing_source = filtered_df.dropna(
+        subset=["completion_time_minutes", "assigned_to", "task_age_days"]
+    )
+    if ageing_source.empty:
+        st.info("No hay datos suficientes para comparar antiguedad y tiempo de cierre.")
+    else:
+        fig_ageing = px.scatter(
+            ageing_source,
+            x="task_age_days",
+            y="completion_time_days",
+            color="status",
+            size="completion_time_days",
+            hover_data=["title", "assigned_to", "created_by"],
+            color_discrete_map=PALETTE,
+            labels={
+                "task_age_days": "Antiguedad de la tarea (dias)",
+                "completion_time_days": "Tiempo de cierre (dias)",
+            },
+        )
+        fig_ageing.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
+        st.plotly_chart(fig_ageing, use_container_width=True)
+
 with heatmap_tab:
     st.subheader("Mapa de calor de carga operativa")
     heatmap_source = filtered_df.copy()
@@ -689,6 +783,7 @@ with heatmap_tab:
             z="value",
             histfunc="avg",
             color_continuous_scale="YlGnBu",
+            category_orders={"created_weekday": WEEKDAY_ORDER},
             labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     else:
@@ -705,6 +800,7 @@ with heatmap_tab:
             z="value",
             histfunc="avg",
             color_continuous_scale="Sunsetdark",
+            category_orders={"created_weekday": WEEKDAY_ORDER},
             labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     fig_heatmap.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=430)
@@ -761,8 +857,11 @@ with detail_tab:
             submitted = st.form_submit_button("Crear tarea")
 
         if submitted:
+            if not new_title.strip():
+                st.error("El titulo es obligatorio.")
+                st.stop()
             payload = {
-                "title": new_title,
+                "title": new_title.strip(),
                 "description": new_description or None,
                 "created_by": new_created_by or None,
                 "assigned_to": new_assigned_to or None,
@@ -775,5 +874,6 @@ with detail_tab:
                 st.success(
                     "Tarea creada correctamente. Recarga la pagina para verla en las graficas."
                 )
+                st.rerun()
             except requests.RequestException as exc:
                 st.error(f"No se pudo crear la tarea: {exc}")

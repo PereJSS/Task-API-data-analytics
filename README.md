@@ -12,11 +12,38 @@ pinned: false
 
 API REST para gestion de tareas con FastAPI, SQLAlchemy, SQLite y dashboard analitico en Streamlit.
 
+## Portfolio snapshot
+
+Proyecto end-to-end orientado a portfolio de data y backend:
+
+- API REST desplegada gratis en Hugging Face Spaces
+- base de datos PostgreSQL en Supabase
+- dashboard analitico en Streamlit conectado a datos reales
+- pipeline de migraciones con Alembic
+- tests automatizados y control de calidad con Ruff
+
+Este proyecto no se limita a un CRUD. Tambien demuestra:
+
+- modelado de datos orientado a analitica
+- despliegue cloud low-cost con varias piezas coordinadas
+- capa de reporting con filtros, KPIs, heatmaps y series temporales
+- preparacion de demo data historica para portfolio y pruebas visuales
+
 ## Demo publica
 
 - API publica: https://perejss-taskflow-api.hf.space
 - Endpoints utiles: `/health`, `/docs`, `/tasks`, `/tasks/stats/summary`
 - Dashboard Streamlit: configura `TASKFLOW_API_BASE_URL` con la URL de la API publica y cambia la fuente a `API remota`
+
+## Lo que resuelve
+
+TaskFlow simula un entorno de operaciones donde hay que responder preguntas como:
+
+- quien esta absorbiendo mas carga de trabajo
+- que porcentaje del flujo termina bloqueado o cancelado
+- cuanto tarda en cerrarse una tarea segun responsable
+- en que periodos sube o baja la carga operativa
+- como cambia el comportamiento cuando filtramos por estado, creador o ventana temporal
 
 ## Resumen
 
@@ -41,6 +68,14 @@ El proyecto incluye:
 - SQLite
 - Streamlit
 - Pytest
+
+## Arquitectura
+
+1. FastAPI expone endpoints CRUD y metricas agregadas.
+2. SQLAlchemy y Pydantic modelan las tareas con campos utiles para analitica.
+3. Alembic controla el esquema y las migraciones en entornos reales.
+4. Streamlit consume la API o genera un modo demo local para portfolio.
+5. Supabase almacena datos persistentes y Hugging Face Spaces publica la API.
 
 ## Estructura
 
