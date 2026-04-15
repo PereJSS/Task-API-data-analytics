@@ -1,3 +1,13 @@
+---
+title: TaskFlow API
+emoji: "📊"
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # TaskFlow API
 
 API REST para gestion de tareas con FastAPI, SQLAlchemy, SQLite y dashboard analitico en Streamlit.
