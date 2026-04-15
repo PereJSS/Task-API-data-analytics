@@ -277,8 +277,8 @@ def render_insights(df: pd.DataFrame) -> None:
     )
 
 
-inject_styles()
 st.set_page_config(page_title="TaskFlow Analytics", layout="wide")
+inject_styles()
 st.markdown(
     """
     <div class="hero-card">
