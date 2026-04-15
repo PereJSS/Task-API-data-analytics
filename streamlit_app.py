@@ -1,11 +1,17 @@
 import random
 from datetime import datetime, timedelta
+from io import BytesIO
 from typing import Dict, List, Tuple
+from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
 import plotly.express as px
 import requests
 import streamlit as st
+from plotly.graph_objects import Figure
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 from app.config import settings
 
@@ -30,6 +36,18 @@ PALETTE = {
     "blocked": "#e76f51",
     "completed": "#2a9d8f",
     "cancelled": "#6c757d",
+}
+
+CHART_TITLES = {
+    "status_distribution": "Distribucion por estado",
+    "closure_time_by_assignee": "Tiempo medio de cierre por responsable",
+    "resolution_boxplot": "Distribucion de tiempos de resolucion",
+    "completion_rate_by_assignee": "Tasa de cierre por responsable",
+    "timeline": "Evolucion operativa",
+    "creator_load": "Carga por creador",
+    "ageing_vs_closure": "Antiguedad vs tiempo de cierre",
+    "heatmap": "Mapa de calor operativa",
+    "duration_matrix": "Matriz de duracion por tramos",
 }
 
 
@@ -322,6 +340,103 @@ def create_task_from_streamlit(api_base_url: str, payload: Dict, api_key: str) -
     response.raise_for_status()
 
 
+def build_chart_export_zip(figures: Dict[str, Figure], export_format: str) -> bytes:
+    """Package the current figures as a downloadable zip in HTML or PNG format."""
+    buffer = BytesIO()
+    extension = "html" if export_format == "html" else "png"
+
+    with ZipFile(buffer, mode="w", compression=ZIP_DEFLATED) as archive:
+        for chart_key, fig in figures.items():
+            if export_format == "html":
+                content = fig.to_html(full_html=True, include_plotlyjs="cdn").encode("utf-8")
+            else:
+                content = fig.to_image(format="png", scale=2)
+            archive.writestr(f"{chart_key}.{extension}", content)
+
+    return buffer.getvalue()
+
+
+def build_pdf_report(
+    stats: Dict[str, float],
+    df: pd.DataFrame,
+    figures: Dict[str, Figure],
+    closure_time_unit: str,
+) -> bytes:
+    """Generate a compact PDF report with KPIs and the most representative charts."""
+    pdf_buffer = BytesIO()
+    pdf = canvas.Canvas(pdf_buffer, pagesize=A4)
+    width, height = A4
+    margin_x = 40
+    y_position = height - 50
+
+    pdf.setTitle("TaskFlow Analytics Report")
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawString(margin_x, y_position, "TaskFlow Analytics Report")
+
+    y_position -= 24
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(
+        margin_x,
+        y_position,
+        f"Generado: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}",
+    )
+
+    y_position -= 28
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin_x, y_position, "Resumen ejecutivo")
+
+    y_position -= 18
+    pdf.setFont("Helvetica", 10)
+    summary_lines = [
+        f"Total tareas: {stats['total']}",
+        f"Completadas: {stats['completed']}",
+        f"Pendientes: {stats['pending']}",
+        f"Porcentaje de cierre: {stats['completion_rate']}%",
+        "Promedio de cierre: "
+        f"{format_duration_value(stats['avg_completion_minutes'], closure_time_unit)}",
+    ]
+    for line in summary_lines:
+        pdf.drawString(margin_x, y_position, line)
+        y_position -= 14
+
+    busiest = "N/A"
+    if not df["assigned_to"].dropna().empty:
+        busiest = str(df["assigned_to"].value_counts().index[0])
+    blocked_share = 0 if df.empty else round(float((df["status"] == "blocked").mean() * 100), 1)
+    pdf.drawString(margin_x, y_position, f"Responsable con mas carga: {busiest}")
+    y_position -= 14
+    pdf.drawString(margin_x, y_position, f"Peso de bloqueos: {blocked_share}%")
+    y_position -= 24
+
+    for chart_key in list(figures.keys())[:3]:
+        chart_title = CHART_TITLES.get(chart_key, chart_key.replace("_", " ").title())
+        image_bytes = figures[chart_key].to_image(format="png", scale=2)
+        image = ImageReader(BytesIO(image_bytes))
+        chart_height = 180
+        chart_width = width - (margin_x * 2)
+
+        if y_position - chart_height < 60:
+            pdf.showPage()
+            y_position = height - 50
+
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(margin_x, y_position, chart_title)
+        y_position -= 16
+        pdf.drawImage(
+            image,
+            margin_x,
+            y_position - chart_height,
+            width=chart_width,
+            height=chart_height,
+            preserveAspectRatio=True,
+            mask="auto",
+        )
+        y_position -= chart_height + 22
+
+    pdf.save()
+    return pdf_buffer.getvalue()
+
+
 def render_insights(df: pd.DataFrame) -> None:
     """Surface three quick conclusions so the reader understands the story before the detail."""
     blocked_share = 0 if df.empty else round(float((df["status"] == "blocked").mean() * 100), 1)
@@ -568,6 +683,8 @@ st.download_button(
     mime="text/csv",
 )
 
+export_figures: Dict[str, Figure] = {}
+
 overview_tab, timeline_tab, heatmap_tab, detail_tab = st.tabs(
     ["Resumen", "Evolucion", "Mapa de calor", "Detalle"]
 )
@@ -608,6 +725,7 @@ with overview_tab:
                 hole=0.55,
             )
         fig_status.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
+        export_figures["status_distribution"] = fig_status
         st.plotly_chart(fig_status, use_container_width=True)
 
     with overview_right:
@@ -637,6 +755,7 @@ with overview_tab:
                 labels={value_column: value_label, "assigned_to": "Responsable"},
             )
             fig_time.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
+            export_figures["closure_time_by_assignee"] = fig_time
             st.plotly_chart(fig_time, use_container_width=True)
 
     st.subheader("Distribucion de tiempos de resolucion")
@@ -660,6 +779,7 @@ with overview_tab:
             labels={boxplot_value_column: boxplot_label, "status": "Estado"},
         )
         fig_box.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=360)
+        export_figures["resolution_boxplot"] = fig_box
         st.plotly_chart(fig_box, use_container_width=True)
 
     st.subheader("Tasa de cierre por responsable")
@@ -696,6 +816,7 @@ with overview_tab:
             margin=dict(l=10, r=10, t=30, b=10),
             height=340,
         )
+        export_figures["completion_rate_by_assignee"] = fig_completion_rate
         st.plotly_chart(fig_completion_rate, use_container_width=True)
 
 with timeline_tab:
@@ -731,6 +852,7 @@ with timeline_tab:
             markers=True,
         )
     fig_timeline.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=420)
+    export_figures["timeline"] = fig_timeline
     st.plotly_chart(fig_timeline, use_container_width=True)
 
     st.subheader("Carga por creador")
@@ -749,6 +871,7 @@ with timeline_tab:
         color_discrete_sequence=["#1d3557"],
     )
     fig_creators.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=320)
+    export_figures["creator_load"] = fig_creators
     st.plotly_chart(fig_creators, use_container_width=True)
 
     st.subheader("Antiguedad vs tiempo de cierre")
@@ -772,6 +895,7 @@ with timeline_tab:
             },
         )
         fig_ageing.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=380)
+        export_figures["ageing_vs_closure"] = fig_ageing
         st.plotly_chart(fig_ageing, use_container_width=True)
 
 with heatmap_tab:
@@ -821,6 +945,7 @@ with heatmap_tab:
             labels={"assigned_to": "Responsable", heatmap_y: heatmap_y_label, "value": "Valor"},
         )
     fig_heatmap.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=430)
+    export_figures["heatmap"] = fig_heatmap
     st.plotly_chart(fig_heatmap, use_container_width=True)
 
     st.subheader("Matriz de duracion por tramos")
@@ -842,6 +967,7 @@ with heatmap_tab:
             color_continuous_scale="Mint",
         )
         fig_duration.update_layout(margin=dict(l=10, r=10, t=30, b=10), height=350)
+        export_figures["duration_matrix"] = fig_duration
         st.plotly_chart(fig_duration, use_container_width=True)
 
 with detail_tab:
@@ -855,6 +981,37 @@ with detail_tab:
         filtered_df.sort_values("created_at", ascending=False),
         use_container_width=True,
         hide_index=True,
+    )
+
+    st.divider()
+    st.subheader("Exportacion")
+    pdf_report = build_pdf_report(
+        stats=stats,
+        df=filtered_df,
+        figures=export_figures,
+        closure_time_unit=closure_time_unit,
+    )
+    html_zip = build_chart_export_zip(export_figures, export_format="html")
+    png_zip = build_chart_export_zip(export_figures, export_format="png")
+
+    export_col1, export_col2, export_col3 = st.columns(3)
+    export_col1.download_button(
+        label="Descargar reporte PDF",
+        data=pdf_report,
+        file_name="taskflow_report.pdf",
+        mime="application/pdf",
+    )
+    export_col2.download_button(
+        label="Descargar graficos HTML",
+        data=html_zip,
+        file_name="taskflow_charts_html.zip",
+        mime="application/zip",
+    )
+    export_col3.download_button(
+        label="Descargar graficos PNG",
+        data=png_zip,
+        file_name="taskflow_charts_png.zip",
+        mime="application/zip",
     )
 
     if data_source == "API remota":

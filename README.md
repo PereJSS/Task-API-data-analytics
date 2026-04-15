@@ -35,6 +35,22 @@ Este proyecto no se limita a un CRUD. Tambien demuestra:
 - Endpoints utiles: `/health`, `/docs`, `/tasks`, `/tasks/stats/summary`
 - Dashboard Streamlit: configura `TASKFLOW_API_BASE_URL` con la URL de la API publica y cambia la fuente a `API remota`
 
+## Capturas
+
+Las imagenes siguientes se generan desde el propio proyecto con `generate_portfolio_assets.py`, para que el README no dependa de capturas manuales desactualizadas.
+
+### Distribucion por estado
+
+![Distribucion por estado](assets/capture-status.png)
+
+### Evolucion operativa
+
+![Evolucion operativa](assets/capture-timeline.png)
+
+### Mapa de calor operativa
+
+![Mapa de calor operativa](assets/capture-heatmap.png)
+
 ## Lo que resuelve
 
 TaskFlow simula un entorno de operaciones donde hay que responder preguntas como:
@@ -169,6 +185,7 @@ Incluye:
 - Seccion de insights automatizados para lectura ejecutiva.
 - Formulario para crear tareas cuando se usa `API remota`.
 - Descarga CSV de los datos filtrados.
+- Exportacion de reporte PDF y paquetes ZIP con graficos en HTML o PNG.
 
 ## Guia rapida de demo
 
@@ -311,6 +328,12 @@ El seed genera:
 - tareas completadas, bloqueadas, canceladas y en progreso
 - fechas distribuidas en el tiempo
 - tiempos de resolucion para tareas completadas
+
+Para regenerar las imagenes del README:
+
+```bash
+python generate_portfolio_assets.py
+```
 
 ## Migraciones
 
