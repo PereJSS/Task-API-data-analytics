@@ -126,6 +126,36 @@ Puedes publicar solo el dashboard en Streamlit Community Cloud sin coste:
 
 No necesitas desplegar API ni base de datos para demo, porque el modo local genera datos analiticos automaticamente.
 
+## API real gratis: Streamlit + Hugging Face Spaces + Supabase
+
+Si quieres mantener el dashboard gratis pero conectado a una API real:
+
+1. Crea una base Postgres gratis en Supabase.
+2. Crea un Space de tipo Docker en Hugging Face usando este repositorio.
+3. En el Space, configura estas variables:
+
+```text
+TASKFLOW_ENV=production
+TASKFLOW_DATABASE_URL=<connection string de Supabase>
+TASKFLOW_AUTO_INIT_DB=false
+PORT=7860
+```
+
+4. El contenedor de la API arrancara con [Dockerfile](Dockerfile) y ejecutara migraciones antes de levantar FastAPI.
+5. En Streamlit Community Cloud, define `TASKFLOW_API_BASE_URL` con la URL publica del Space, por ejemplo:
+
+```text
+https://tu-space.hf.space
+```
+
+6. En la app, cambia la fuente a `API remota`.
+
+Notas practicas:
+
+- Hugging Face Spaces gratuito puede dormir la API cuando no se usa.
+- Supabase free tier es suficiente para demo y portfolio, no para carga real.
+- Para Supabase, usa preferiblemente la cadena de conexion de pooler o la connection string directa de Postgres segun su panel.
+
 ## Docker
 
 Levantar API y dashboard con Docker Compose:
