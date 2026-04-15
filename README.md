@@ -110,8 +110,9 @@ Tambien puedes cambiar en la barra lateral a **API remota** para consumir el bac
 
 Incluye:
 
-- Filtros por estado, responsable y fecha.
-- Graficos para distribucion de estados y tiempos medios.
+- Filtros globales por estado, responsable, creador, fecha, texto y tiempo de cierre.
+- Graficos de distribucion, serie temporal, boxplot y mapa de calor.
+- Seccion de insights automatizados para lectura ejecutiva.
 - Descarga CSV de los datos filtrados.
 
 ## Despliegue gratuito (opcion recomendada)
