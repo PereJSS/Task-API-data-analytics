@@ -110,6 +110,7 @@ Variables soportadas:
 - `TASKFLOW_ENV`: `development` o `production`.
 - `TASKFLOW_DATABASE_URL`: URL de base de datos SQLite o Postgres.
 - `TASKFLOW_API_BASE_URL`: URL base que usara Streamlit para consultar la API.
+- `TASKFLOW_DEFAULT_DATA_SOURCE`: `demo` o `api` para elegir la fuente inicial del dashboard.
 - `TASKFLOW_AUTO_INIT_DB`: controla la inicializacion automatica de esquema al arrancar.
 - `TASKFLOW_WRITE_API_KEY`: clave opcional para habilitar escritura en despliegues protegidos.
 
@@ -217,6 +218,12 @@ Importante:
 
 ```text
 https://tu-space.hf.space
+```
+
+Y para que el dashboard arranque directamente conectado a la API:
+
+```text
+TASKFLOW_DEFAULT_DATA_SOURCE=api
 ```
 
 6. En la app, cambia la fuente a `API remota`.

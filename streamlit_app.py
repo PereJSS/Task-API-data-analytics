@@ -399,7 +399,12 @@ with st.sidebar:
     st.caption("Configura origen, filtros y comportamiento de cada bloque analitico.")
 
     st.subheader("Fuente de datos")
-    data_source = st.radio("Origen de datos", ["Demo local (gratis)", "API remota"], index=0)
+    default_source_index = 1 if settings.streamlit_default_data_source == "api" else 0
+    data_source = st.radio(
+        "Origen de datos",
+        ["Demo local (gratis)", "API remota"],
+        index=default_source_index,
+    )
     include_archived = st.checkbox("Incluir archivadas", value=True)
     api_url = st.text_input("API base URL", value=API_BASE_URL)
     write_api_key = st.text_input(

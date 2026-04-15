@@ -13,6 +13,9 @@ class Settings:
         self.database_url = self._normalize_database_url(raw_database_url)
         raw_api_base_url = os.getenv("TASKFLOW_API_BASE_URL", "http://127.0.0.1:8000")
         self.streamlit_api_base_url = self._normalize_http_url(raw_api_base_url)
+        self.streamlit_default_data_source = self._normalize_default_data_source(
+            os.getenv("TASKFLOW_DEFAULT_DATA_SOURCE", "demo")
+        )
         self.auto_init_db = os.getenv("TASKFLOW_AUTO_INIT_DB", "true").lower() == "true"
         self.write_api_key = os.getenv("TASKFLOW_WRITE_API_KEY", "").strip()
 
@@ -63,6 +66,14 @@ class Settings:
         if raw_url.startswith(("http://", "https://")):
             return raw_url
         return f"http://{raw_url}"
+
+    @staticmethod
+    def _normalize_default_data_source(raw_value: str) -> str:
+        """Normalize the preferred Streamlit source selector to demo or api."""
+        normalized = raw_value.strip().lower()
+        if normalized in {"api", "remote", "api_remota"}:
+            return "api"
+        return "demo"
 
 
 settings = Settings()
